@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Video to MP3</title>
+  <style>
+    body { font: 16px system-ui, sans-serif; max-width: 620px; margin: 4rem auto; padding: 0 1rem; color: #222; }
+    input, select, button { box-sizing: border-box; font: inherit; padding: .7rem; }
+    input[type="text"], input[type="password"] { width: 100%; margin: .4rem 0 1rem; }
+    button { cursor: pointer; }
+    .message { padding: .8rem; background: #f3f3f3; border-radius: 6px; }
+    progress { width: 100%; height: 1.2rem; }
+    .row { margin: 1rem 0; }
+  </style>
+</head>
+<body>
+  <h1>Video to MP3</h1>
+
+  {% if message %}
+    <p class="message" role="alert">{{ message }}</p>
+  {% endif %}
+
+  {% if session.get("logged_in") %}
+    <form method="post" action="{{ url_for('logout') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit">Log out</button>
+    </form>
+
+    <form method="post" action="{{ url_for('start_conversion') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <label for="url">YouTube video link</label>
+      <input id="url" name="url" type="text" required maxlength="2048"
+             placeholder="https://www.youtube.com/watch?v=..." autocomplete="url">
+
+      <label for="quality">MP3 quality</label>
+      <select id="quality" name="quality">
+        <option value="192">192 kbps</option>
+        <option value="256">256 kbps</option>
+        <option value="320">320 kbps</option>
+        <option value="160">160 kbps</option>
+        <option value="128">128 kbps</option>
+        <option value="96">96 kbps</option>
+      </select>
+
+      <button type="submit">Convert</button>
+    </form>
+
+    {% if job_id %}
+      <div class="row" id="job" data-status-url="{{ url_for('job_status', job_id=job_id) }}"
+           data-download-url="{{ url_for('download', job_id=job_id) }}">
+        <p id="status-message">Starting…</p>
+        <progress id="progress" value="0" max="100"></progress>
+        <p><a id="download-link" hidden>Download MP3</a></p>
+      </div>
+      <script>
+        (function () {
+          const job = document.getElementById("job");
+          const message = document.getElementById("status-message");
+          const progress = document.getElementById("progress");
+          const link = document.getElementById("download-link");
+
+          async function poll() {
+            try {
+              const response = await fetch(job.dataset.statusUrl, { credentials: "same-origin" });
+              if (!response.ok) throw new Error("Could not get conversion status.");
+              const data = await response.json();
+              message.textContent = data.message;
+              progress.value = data.progress || 0;
+
+              if (data.state === "done") {
+                link.href = job.dataset.downloadUrl;
+                link.hidden = false;
+                return;
+              }
+              if (data.state === "error") return;
+              window.setTimeout(poll, 1000);
+            } catch (error) {
+              message.textContent = error.message;
+            }
+          }
+          poll();
+        })();
+      </script>
+    {% endif %}
+  {% else %}
+    <form method="post" action="{{ url_for('login') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="access_code">Access code</label>
+      <input id="access_code" name="access_code" type="password" required
+             autocomplete="current-password">
+      <button type="submit">Log in</button>
+    </form>
+  {% endif %}
+</body>
+</html>

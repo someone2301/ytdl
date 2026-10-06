@@ -1,0 +1,11 @@
+
+.env
+*.env
+*.mp3
+.venv/
+__pycache__/
+
+.DS_Store
+
+__pycache__/
+mp3_downloads/
