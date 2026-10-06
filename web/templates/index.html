@@ -34,15 +34,46 @@
       <input id="url" name="url" type="text" required maxlength="2048"
              placeholder="https://www.youtube.com/watch?v=..." autocomplete="url">
 
-      <label for="quality">MP3 quality</label>
-      <select id="quality" name="quality">
-        <option value="192">192 kbps</option>
-        <option value="256">256 kbps</option>
-        <option value="320">320 kbps</option>
-        <option value="160">160 kbps</option>
-        <option value="128">128 kbps</option>
-        <option value="96">96 kbps</option>
+      <label for="audio_format">Output format</label>
+      <select id="audio_format" name="audio_format">
+        <option value="mp3">MP3</option>
+        <option value="wav">WAV</option>
       </select>
+
+      <div id="mp3-quality">
+        <label for="quality">MP3 bitrate</label>
+        <select id="quality" name="quality">
+          <option value="96">96 kbps</option>
+          <option value="128">128 kbps</option>
+          <option value="160">160 kbps</option>
+          <option value="192" selected>192 kbps</option>
+          <option value="256">256 kbps</option>
+          <option value="320">320 kbps</option>
+        </select>
+      </div>
+
+      <details>
+        <summary>Advanced options</summary>
+        <div class="row">
+          <label for="sample_rate">Sample rate</label>
+          <select id="sample_rate" name="sample_rate">
+            <option value="">Keep source rate</option>
+            <option value="22050">22.05 kHz</option>
+            <option value="32000">32 kHz</option>
+            <option value="44100">44.1 kHz</option>
+            <option value="48000">48 kHz</option>
+          </select>
+        </div>
+        <div class="row" id="wav-bit-depth">
+          <label for="bit_depth">WAV bit depth</label>
+          <select id="bit_depth" name="bit_depth">
+            <option value="16" selected>16-bit</option>
+            <option value="24">24-bit</option>
+            <option value="32">32-bit</option>
+          </select>
+          <p>Bit depth applies only to WAV. MP3 uses the bitrate setting.</p>
+        </div>
+      </details>
 
       <button type="submit">Convert</button>
     </form>
@@ -52,7 +83,7 @@
            data-download-url="{{ url_for('download', job_id=job_id) }}">
         <p id="status-message">Starting…</p>
         <progress id="progress" value="0" max="100"></progress>
-        <p><a id="download-link" hidden>Download MP3</a></p>
+        <p><a id="download-link" hidden>Download audio file</a></p>
       </div>
       <script>
         (function () {
@@ -93,5 +124,27 @@
       <button type="submit">Log in</button>
     </form>
   {% endif %}
+  <script>
+    (function () {
+      const format = document.getElementById("audio_format");
+      if (!format) return;
+
+      const qualityGroup = document.getElementById("mp3-quality");
+      const quality = document.getElementById("quality");
+      const bitDepthGroup = document.getElementById("wav-bit-depth");
+      const bitDepth = document.getElementById("bit_depth");
+
+      function updateFormatOptions() {
+        const isMp3 = format.value === "mp3";
+        qualityGroup.hidden = !isMp3;
+        quality.disabled = !isMp3;
+        bitDepthGroup.hidden = isMp3;
+        bitDepth.disabled = isMp3;
+      }
+
+      format.addEventListener("change", updateFormatOptions);
+      updateFormatOptions();
+    })();
+  </script>
 </body>
 </html>

@@ -146,7 +146,7 @@ def set_job(job_id, **changes):
             JOBS[job_id].update(changes)
 
 
-def convert_job(job_id, video_url, quality):
+def convert_job(job_id, video_url, quality, audio_format, sample_rate, bit_depth):
     job_dir = OUTPUT_ROOT / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
     set_job(job_id, state="running", progress=0, message="Checking video…")
@@ -156,6 +156,25 @@ def convert_job(job_id, video_url, quality):
             raise RuntimeError("ffmpeg is unavailable")
 
         options = build_options(job_dir, quality, playlist=False, embed_art=False)
+        extract_audio = next(
+            pp for pp in options["postprocessors"]
+            if pp["key"] == "FFmpegExtractAudio"
+        )
+        extract_audio["preferredcodec"] = audio_format
+
+        if audio_format == "wav":
+            extract_audio.pop("preferredquality", None)
+
+        ffmpeg_args = []
+        if sample_rate:
+            ffmpeg_args.extend(["-ar", str(sample_rate)])
+        if audio_format == "wav":
+            ffmpeg_args.extend(["-acodec", f"pcm_s{bit_depth}le"])
+        if ffmpeg_args:
+            options["postprocessor_args"] = {
+                "extractaudio+ffmpeg_o": ffmpeg_args
+            }
+
         options.update({
             "quiet": True,
             "no_warnings": True,
@@ -170,7 +189,7 @@ def convert_job(job_id, video_url, quality):
                 percent = int(data.get("downloaded_bytes", 0) * 100 / total) if total else 0
                 set_job(job_id, progress=min(percent, 99), message="Downloading and converting…")
             elif data.get("status") == "finished":
-                set_job(job_id, progress=99, message="Finishing MP3…")
+                set_job(job_id, progress=99, message="Finishing audio…")
 
         options["progress_hooks"] = [progress_hook]
 
@@ -183,23 +202,22 @@ def convert_job(job_id, video_url, quality):
                 raise ValueError("Video duration is unknown or exceeds 20 minutes.")
             downloader.download([video_url])
 
-        mp3_files = list(job_dir.glob("*.mp3"))
-        if not mp3_files:
-            raise RuntimeError("No MP3 was created")
+        audio_files = list(job_dir.glob(f"*.{audio_format}"))
+        if not audio_files:
+            raise RuntimeError(f"No {audio_format.upper()} file was created")
 
         set_job(
             job_id,
             state="done",
             progress=100,
             message="Ready to download.",
-            file=str(mp3_files[0]),
+            file=str(audio_files[0]),
         )
     except ValueError as exc:
         set_job(job_id, state="error", message=str(exc))
     except Exception:
         app.logger.exception("Conversion failed")
         set_job(job_id, state="error", message="Conversion failed. Check the link and try again.")
-
 
 @app.get("/")
 def index():
@@ -242,9 +260,22 @@ def start_conversion():
     except ValueError as exc:
         return render_template("index.html", message=str(exc)), 400
 
+    audio_format = request.form.get("audio_format", "mp3")
+    if audio_format not in {"mp3", "wav"}:
+        return render_template("index.html", message="Choose MP3 or WAV."), 400
+
     quality = request.form.get("quality", "192")
-    if quality not in QUALITIES:
-        return render_template("index.html", message="Choose a listed audio quality."), 400
+    if audio_format == "mp3" and quality not in QUALITIES:
+        return render_template("index.html", message="Choose a listed MP3 bitrate."), 400
+
+    sample_rate = request.form.get("sample_rate", "")
+    allowed_sample_rates = {"", "22050", "32000", "44100", "48000"}
+    if sample_rate not in allowed_sample_rates:
+        return render_template("index.html", message="Choose a listed sample rate."), 400
+
+    bit_depth = request.form.get("bit_depth", "16")
+    if audio_format == "wav" and bit_depth not in {"16", "24", "32"}:
+        return render_template("index.html", message="Choose a listed WAV bit depth."), 400
 
     job_id = secrets.token_urlsafe(18)
     with LOCK:
@@ -255,9 +286,11 @@ def start_conversion():
             "created": time.time(),
             "file": None,
         }
-    EXECUTOR.submit(convert_job, job_id, video_url, quality)
+    EXECUTOR.submit(
+        convert_job, job_id, video_url, quality, audio_format,
+        sample_rate or None, bit_depth,
+    )
     return render_template("index.html", message=None, job_id=job_id)
-
 
 @app.get("/status/<job_id>")
 @require_login

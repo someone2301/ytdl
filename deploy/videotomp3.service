@@ -1,0 +1,26 @@
+[Unit]
+Description=Video to MP3 web app
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=videotomp3
+Group=videotomp3
+WorkingDirectory=/opt/VideoToMP3
+EnvironmentFile=/etc/videotomp3.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/VideoToMP3/.venv/bin/gunicorn --workers 1 --threads 4 --bind 127.0.0.1:8000 --timeout 180 --access-logfile - --error-logfile - web.app:app
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/videotomp3
+
+[Install]
+WantedBy=multi-user.target
